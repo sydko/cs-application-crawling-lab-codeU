@@ -8,6 +8,7 @@ import java.util.Queue;
 
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.jsoup.nodes.Node;
 
 import redis.clients.jedis.Jedis;
 
@@ -55,7 +56,28 @@ public class WikiCrawler {
 	 */
 	public String crawl(boolean testing) throws IOException {
         // FILL THIS IN!
-		return null;
+        Elements paragraphs; //the paragraphs of a page
+
+		String url = queue.poll();// Get's the first list off the queue
+        if (testing){    	
+        	paragraphs = wf.readWikipedia(url); // Read page using WikiFetcher.readWikipedia
+        	index.indexPage(url, paragraphs); //indexes pages regardless if theyve been read or not
+        	return url;
+
+        } else {
+        	if(index.isIndexed(url)){
+        		// if the url is indexed it should not index it again
+        		return null;
+        	} else { //else it should read the contents of the page
+        		
+        		paragraphs = wf.fetchWikipedia(url); // read page using WikiFetcher.readWikipedia
+        		
+        		index.indexPage(url, paragraphs); //should index the page,
+        		queueInternalLinks(paragraphs);
+        		return url;
+
+        	}
+        }
 	}
 	
 	/**
@@ -65,8 +87,104 @@ public class WikiCrawler {
 	 */
 	// NOTE: absence of access level modifier means package-level
 	void queueInternalLinks(Elements paragraphs) {
-        // FILL THIS IN!
+		//need to use wikinodeIterable
+
+	   for (Element paragraph : paragraphs){
+			queueParagraphLinks(paragraph);
+		}
 	}
+	// queue.add("new link")
+	// 
+
+	private void queueParagraphLinks(Node root) {
+		// create an Iterable that traverses the tree
+		Iterable<Node> nt = new WikiNodeIterable(root);
+
+		// loop through the nodes
+		for (Node node: nt) {
+			// process elements to get find links
+			if (node instanceof Element) {
+				Element link = (Element) node;
+				if ((link != null) && validLink(link)){
+					queue.add((String) link.text());
+				} 
+			}
+		}
+	}
+
+	/**
+	 * Checks whether a link is value.
+	 * 
+	 * @param elt
+	 * @return
+	 */
+	private boolean validLink(Element elt) {
+		// it's no good if it's
+		// not a link
+		if (!elt.tagName().equals("a")) {
+			return false;
+		}
+		// in italics
+		if (isItalic(elt)) {
+			return false;
+		}
+		// // in parenthesis
+		// if (isInParens(elt)) {
+		// 	return false;
+		// }
+		// a bookmark
+		if (startsWith(elt, "#")) {
+			return false;
+		}
+		// a Wikipedia help page
+		if (startsWith(elt, "/wiki/Help:")) {
+			return false;
+		}
+		// TODO: there are a couple of other "rules" we haven't handled
+		return true;
+	}
+
+	/**
+	 * Checks whether a link starts with a given String.
+	 * 
+	 * @param elt
+	 * @param s
+	 * @return
+	 */
+	private boolean startsWith(Element elt, String s) {
+		//System.out.println(elt.attr("href"));
+		return (elt.attr("href").startsWith(s));
+	}
+
+	// /**
+	//  * Checks whether the element is in parentheses (possibly nested).
+	//  * 
+	//  * @param elt
+	//  * @return
+	//  */
+	// private boolean isInParens(Element elt) {
+	// 	// check whether there are any parentheses on the stack
+	// 	return !parenthesisStack.isEmpty();
+	// }
+
+	/**
+	 * Checks whether the element is in italics.
+	 * 
+	 * (Either a "i" or "em" tag)
+	 * 
+	 * @param start
+	 * @return
+	 */
+	private boolean isItalic(Element start) {
+		// follow the parent chain until we get to null
+		for (Element elt=start; elt != null; elt = elt.parent()) {
+			if (elt.tagName().equals("i") || elt.tagName().equals("em")) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 
 	public static void main(String[] args) throws IOException {
 		
