@@ -56,9 +56,13 @@ public class WikiCrawler {
 	 */
 	public String crawl(boolean testing) throws IOException {
         // FILL THIS IN!
-        Elements paragraphs; //the paragraphs of a page
+        if (queue.isEmpty()) {
+			return null;
+		}
+        
 
 		String url = queue.poll();// Get's the first list off the queue
+        Elements paragraphs; //the paragraphs of a page
         if (testing){    	
         	paragraphs = wf.readWikipedia(url); // Read page using WikiFetcher.readWikipedia
         	index.indexPage(url, paragraphs); //indexes pages regardless if theyve been read or not
@@ -93,21 +97,15 @@ public class WikiCrawler {
 			queueParagraphLinks(paragraph);
 		}
 	}
-	// queue.add("new link")
-	// 
 
-	private void queueParagraphLinks(Node root) {
-		// create an Iterable that traverses the tree
-		Iterable<Node> nt = new WikiNodeIterable(root);
+	private void queueParagraphLinks(Element paragraph) {
+		Elements elts = paragraph.select("a[href]");
+		for (Element elt: elts){
+			String relativeUrl = elt.attr("href");// Get the relative url
 
-		// loop through the nodes
-		for (Node node: nt) {
-			// process elements to get find links
-			if (node instanceof Element) {
-				Element link = (Element) node;
-				if ((link != null) && validLink(link)){
-					queue.add((String) link.text());
-				} 
+			if (relativeUrl.startsWith("/wiki/")) {
+					String absoluteURL = "https://en.wikipedia.org" + relativeUrl;
+					queue.offer(absoluteURL);
 			}
 		}
 	}
