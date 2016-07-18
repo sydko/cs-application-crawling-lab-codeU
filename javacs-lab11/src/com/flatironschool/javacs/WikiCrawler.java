@@ -8,7 +8,6 @@ import java.util.Queue;
 
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import org.jsoup.nodes.Node;
 
 import redis.clients.jedis.Jedis;
 
@@ -55,35 +54,28 @@ public class WikiCrawler {
 	 * @throws IOException
 	 */
 	public String crawl(boolean testing) throws IOException {
-        // FILL THIS IN!
-        if (queue.isEmpty()) {
+		if (queue.isEmpty()) {
 			return null;
 		}
-        
+		String url = queue.poll();
+		System.out.println("Crawling " + url);
 
-		String url = queue.poll();// Get's the first list off the queue
-        Elements paragraphs; //the paragraphs of a page
-        if (testing){    	
-        	paragraphs = wf.readWikipedia(url); // Read page using WikiFetcher.readWikipedia
-        	index.indexPage(url, paragraphs); //indexes pages regardless if theyve been read or not
-        	return url;
-
-        } else {
-        	if(index.isIndexed(url)){
-        		// if the url is indexed it should not index it again
-        		return null;
-        	} else { //else it should read the contents of the page
-        		
-        		paragraphs = wf.fetchWikipedia(url); // read page using WikiFetcher.readWikipedia
-        		
-        		index.indexPage(url, paragraphs); //should index the page,
-        		queueInternalLinks(paragraphs);
-        		return url;
-
-        	}
-        }
+		if (testing==false && index.isIndexed(url)) {
+			System.out.println("Already indexed.");
+			return null;
+		}
+		
+		Elements paragraphs;
+		if (testing) {
+			paragraphs = wf.readWikipedia(url);
+		} else {
+			paragraphs = wf.fetchWikipedia(url);
+		}
+		index.indexPage(url, paragraphs);
+		queueInternalLinks(paragraphs);		
+		return url;
 	}
-	
+
 	/**
 	 * Parses paragraphs and adds internal links to the queue.
 	 * 
@@ -91,99 +83,29 @@ public class WikiCrawler {
 	 */
 	// NOTE: absence of access level modifier means package-level
 	void queueInternalLinks(Elements paragraphs) {
-		//need to use wikinodeIterable
-
-	   for (Element paragraph : paragraphs){
-			queueParagraphLinks(paragraph);
+		for (Element paragraph: paragraphs) {
+			queueInternalLinks(paragraph);
 		}
 	}
 
-	private void queueParagraphLinks(Element paragraph) {
+	/**
+	 * Parses a paragraph and adds internal links to the queue.
+	 * 
+	 * @param paragraph
+	 */
+	private void queueInternalLinks(Element paragraph) {
 		Elements elts = paragraph.select("a[href]");
-		for (Element elt: elts){
-			String relativeUrl = elt.attr("href");// Get the relative url
-
-			if (relativeUrl.startsWith("/wiki/")) {
-					String absoluteURL = "https://en.wikipedia.org" + relativeUrl;
-					queue.offer(absoluteURL);
+		for (Element elt: elts) {
+			String relURL = elt.attr("href");
+			
+			if (relURL.startsWith("/wiki/")) {
+				String absURL = "https://en.wikipedia.org" + relURL;
+				//System.out.println(absURL);
+				queue.offer(absURL);
 			}
 		}
 	}
-
-	/**
-	 * Checks whether a link is value.
-	 * 
-	 * @param elt
-	 * @return
-	 */
-	private boolean validLink(Element elt) {
-		// it's no good if it's
-		// not a link
-		if (!elt.tagName().equals("a")) {
-			return false;
-		}
-		// in italics
-		if (isItalic(elt)) {
-			return false;
-		}
-		// // in parenthesis
-		// if (isInParens(elt)) {
-		// 	return false;
-		// }
-		// a bookmark
-		if (startsWith(elt, "#")) {
-			return false;
-		}
-		// a Wikipedia help page
-		if (startsWith(elt, "/wiki/Help:")) {
-			return false;
-		}
-		// TODO: there are a couple of other "rules" we haven't handled
-		return true;
-	}
-
-	/**
-	 * Checks whether a link starts with a given String.
-	 * 
-	 * @param elt
-	 * @param s
-	 * @return
-	 */
-	private boolean startsWith(Element elt, String s) {
-		//System.out.println(elt.attr("href"));
-		return (elt.attr("href").startsWith(s));
-	}
-
-	// /**
-	//  * Checks whether the element is in parentheses (possibly nested).
-	//  * 
-	//  * @param elt
-	//  * @return
-	//  */
-	// private boolean isInParens(Element elt) {
-	// 	// check whether there are any parentheses on the stack
-	// 	return !parenthesisStack.isEmpty();
-	// }
-
-	/**
-	 * Checks whether the element is in italics.
-	 * 
-	 * (Either a "i" or "em" tag)
-	 * 
-	 * @param start
-	 * @return
-	 */
-	private boolean isItalic(Element start) {
-		// follow the parent chain until we get to null
-		for (Element elt=start; elt != null; elt = elt.parent()) {
-			if (elt.tagName().equals("i") || elt.tagName().equals("em")) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-
+	
 	public static void main(String[] args) throws IOException {
 		
 		// make a WikiCrawler
@@ -200,9 +122,6 @@ public class WikiCrawler {
 		String res;
 		do {
 			res = wc.crawl(false);
-
-            // REMOVE THIS BREAK STATEMENT WHEN crawl() IS WORKING
-            break;
 		} while (res == null);
 		
 		Map<String, Integer> map = index.getCounts("the");
